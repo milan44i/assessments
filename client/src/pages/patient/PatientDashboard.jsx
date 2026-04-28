@@ -27,9 +27,30 @@ export const PatientDashboard = () => {
           aiService.getAll().catch(() => ({ analyses: [] })),
           userService.getTrends().catch(() => ({ trends: [] })),
         ]);
-        setStats(statsResponse.stats);
-        const appointments = appointmentsResponse.appointments || [];
-        setRecentAppointments(appointments.slice(0, 3));
+
+        const currentUserId = user?._id || user?.id;
+        const belongsToCurrentUser = (appointment) => {
+          const patientId = appointment.patient?._id || appointment.patient;
+          return patientId && currentUserId && patientId === currentUserId;
+        };
+
+        const allAppointments = appointmentsResponse.appointments || [];
+        const myAppointments = allAppointments.filter(belongsToCurrentUser);
+        setRecentAppointments(myAppointments.slice(0, 3));
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const upcomingCount = myAppointments.filter((a) =>
+          ['pending', 'confirmed'].includes(a.status) &&
+          new Date(a.appointmentDate) >= today
+        ).length;
+
+        setStats({
+          ...statsResponse.stats,
+          myAppointments: myAppointments.length,
+          upcomingAppointments: upcomingCount,
+        });
+
         const analyses = analysesResponse.analyses || [];
         setRecentAnalyses(analyses.slice(0, 3));
         setTrends(trendsResponse.trends || []);

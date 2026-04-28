@@ -8,18 +8,65 @@ import { Label } from '../../components/Label';
 import { format } from 'date-fns';
 import { Calendar, Clock, User, X } from 'lucide-react';
 
+const initialFormData = {
+  doctor: '',
+  appointmentDate: '',
+  appointmentTime: '',
+  reason: '',
+  symptoms: '',
+};
+
+const validate = (values) => {
+  const errors = {};
+
+  if (!values.doctor) {
+    errors.doctor = 'Please select a doctor';
+  }
+
+  if (!values.appointmentDate) {
+    errors.appointmentDate = 'Date is required';
+  } else {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const selected = new Date(values.appointmentDate);
+    selected.setHours(0, 0, 0, 0);
+    if (selected.getTime() <= today.getTime()) {
+      errors.appointmentDate = 'Date must be in the future';
+    }
+  }
+
+  if (!values.appointmentTime) {
+    errors.appointmentTime = 'Time is required';
+  } else if (values.appointmentTime < '09:00' || values.appointmentTime > '17:00') {
+    errors.appointmentTime = 'Time must be between 9:00 AM and 5:00 PM';
+  }
+
+  if (!values.reason || values.reason.trim().length < 10) {
+    errors.reason = 'Reason must be at least 10 characters';
+  }
+
+  return errors;
+};
+
 export const Appointments = () => {
   const [appointments, setAppointments] = useState([]);
   const [doctors, setDoctors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [formData, setFormData] = useState({
-    doctor: '',
-    appointmentDate: '',
-    appointmentTime: '',
-    reason: '',
-    symptoms: '',
-  });
+  const [formData, setFormData] = useState(initialFormData);
+  const [touched, setTouched] = useState({});
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  const errors = validate(formData);
+  const isValid = Object.keys(errors).length === 0;
+
+  const fieldClass = (field, base = '') => {
+    const showError = touched[field] && errors[field];
+    return `${base}${showError ? ' border-red-500 focus-visible:ring-red-500' : ''}`;
+  };
+
+  const markTouched = (field) =>
+    setTouched((prev) => ({ ...prev, [field]: true }));
 
   useEffect(() => {
     fetchAppointments();
@@ -48,16 +95,21 @@ export const Appointments = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setTouched({
+      doctor: true,
+      appointmentDate: true,
+      appointmentTime: true,
+      reason: true,
+    });
+    if (!isValid) return;
+
     try {
       await appointmentService.create(formData);
       setShowForm(false);
-      setFormData({
-        doctor: '',
-        appointmentDate: '',
-        appointmentTime: '',
-        reason: '',
-        symptoms: '',
-      });
+      setFormData(initialFormData);
+      setTouched({});
+      setSubmitSuccess(true);
+      window.setTimeout(() => setSubmitSuccess(false), 4000);
       fetchAppointments();
     } catch (error) {
       alert(error.response?.data?.message || 'Failed to create appointment');
@@ -106,6 +158,15 @@ export const Appointments = () => {
         </Button>
       </div>
 
+      {submitSuccess && (
+        <div
+          role="status"
+          className="rounded-md border border-green-300 bg-green-50 p-3 text-sm text-green-800 dark:bg-green-900/30 dark:text-green-200 dark:border-green-700"
+        >
+          Appointment booked successfully.
+        </div>
+      )}
+
       {showForm && (
         <Card>
           <CardHeader>
@@ -118,10 +179,15 @@ export const Appointments = () => {
                   <Label htmlFor="doctor">Doctor</Label>
                   <select
                     id="doctor"
-                    className="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    className={fieldClass(
+                      'doctor',
+                      'flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm'
+                    )}
                     value={formData.doctor}
-                    onChange={(e) => setFormData({ ...formData, doctor: e.target.value })}
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, doctor: e.target.value });
+                      markTouched('doctor');
+                    }}
                   >
                     <option value="">Select a doctor</option>
                     {doctors.map((doctor) => (
@@ -130,36 +196,60 @@ export const Appointments = () => {
                       </option>
                     ))}
                   </select>
+                  {touched.doctor && errors.doctor && (
+                    <p className="text-sm text-red-600">{errors.doctor}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="appointmentDate">Date</Label>
                   <Input
                     id="appointmentDate"
                     type="date"
+                    className={fieldClass('appointmentDate')}
                     value={formData.appointmentDate}
-                    onChange={(e) => setFormData({ ...formData, appointmentDate: e.target.value })}
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, appointmentDate: e.target.value });
+                      markTouched('appointmentDate');
+                    }}
                     min={new Date().toISOString().split('T')[0]}
                   />
+                  {touched.appointmentDate && errors.appointmentDate && (
+                    <p className="text-sm text-red-600">{errors.appointmentDate}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="appointmentTime">Time</Label>
                   <Input
                     id="appointmentTime"
                     type="time"
+                    className={fieldClass('appointmentTime')}
                     value={formData.appointmentTime}
-                    onChange={(e) => setFormData({ ...formData, appointmentTime: e.target.value })}
-                    required
+                    onChange={(e) => {
+                      setFormData({ ...formData, appointmentTime: e.target.value });
+                      markTouched('appointmentTime');
+                    }}
+                    min="09:00"
+                    max="17:00"
                   />
+                  {touched.appointmentTime && errors.appointmentTime && (
+                    <p className="text-sm text-red-600">{errors.appointmentTime}</p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="reason">Reason</Label>
                   <Input
                     id="reason"
+                    className={fieldClass('reason')}
                     value={formData.reason}
-                    onChange={(e) => setFormData({ ...formData, reason: e.target.value })}
-                    placeholder="Brief reason for visit"
+                    onChange={(e) => {
+                      setFormData({ ...formData, reason: e.target.value });
+                      markTouched('reason');
+                    }}
+                    placeholder="Brief reason for visit (min. 10 characters)"
                   />
+                  {touched.reason && errors.reason && (
+                    <p className="text-sm text-red-600">{errors.reason}</p>
+                  )}
                 </div>
               </div>
               <div className="space-y-2">
@@ -173,8 +263,21 @@ export const Appointments = () => {
                 />
               </div>
               <div className="flex space-x-2">
-                <Button type="submit">Book Appointment</Button>
-                <Button type="button" variant="outline" onClick={() => setShowForm(false)}>
+                <Button
+                  type="submit"
+                  disabled={!isValid}
+                  className="disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Book Appointment
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    setShowForm(false);
+                    setTouched({});
+                  }}
+                >
                   Cancel
                 </Button>
               </div>
