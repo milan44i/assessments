@@ -10,8 +10,19 @@ import { Calendar, Activity, FileText, Stethoscope, TrendingUp, Clock, User } fr
 import { format } from 'date-fns';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
+const startOfToday = () => {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+};
+
+const isUpcoming = (appointment) =>
+  ['pending', 'confirmed'].includes(appointment.status) &&
+  new Date(appointment.appointmentDate) >= startOfToday();
+
 export const PatientDashboard = () => {
   const { user } = useAuth();
+  const currentUserId = user?._id || user?.id;
   const [stats, setStats] = useState(null);
   const [recentAppointments, setRecentAppointments] = useState([]);
   const [recentAnalyses, setRecentAnalyses] = useState([]);
@@ -19,6 +30,13 @@ export const PatientDashboard = () => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!currentUserId) return;
+
+    const belongsToCurrentUser = (appointment) => {
+      const patientId = appointment.patient?._id || appointment.patient;
+      return patientId === currentUserId;
+    };
+
     const fetchData = async () => {
       try {
         const [statsResponse, appointmentsResponse, analysesResponse, trendsResponse] = await Promise.all([
@@ -28,31 +46,15 @@ export const PatientDashboard = () => {
           userService.getTrends().catch(() => ({ trends: [] })),
         ]);
 
-        const currentUserId = user?._id || user?.id;
-        const belongsToCurrentUser = (appointment) => {
-          const patientId = appointment.patient?._id || appointment.patient;
-          return patientId && currentUserId && patientId === currentUserId;
-        };
+        const myAppointments = (appointmentsResponse.appointments || []).filter(belongsToCurrentUser);
 
-        const allAppointments = appointmentsResponse.appointments || [];
-        const myAppointments = allAppointments.filter(belongsToCurrentUser);
         setRecentAppointments(myAppointments.slice(0, 3));
-
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const upcomingCount = myAppointments.filter((a) =>
-          ['pending', 'confirmed'].includes(a.status) &&
-          new Date(a.appointmentDate) >= today
-        ).length;
-
         setStats({
           ...statsResponse.stats,
           myAppointments: myAppointments.length,
-          upcomingAppointments: upcomingCount,
+          upcomingAppointments: myAppointments.filter(isUpcoming).length,
         });
-
-        const analyses = analysesResponse.analyses || [];
-        setRecentAnalyses(analyses.slice(0, 3));
+        setRecentAnalyses((analysesResponse.analyses || []).slice(0, 3));
         setTrends(trendsResponse.trends || []);
       } catch (error) {
         console.error('Failed to fetch data:', error);
@@ -62,7 +64,7 @@ export const PatientDashboard = () => {
     };
 
     fetchData();
-  }, []);
+  }, [currentUserId]);
 
   if (loading) {
     return <div className="text-center py-12">Loading...</div>;
